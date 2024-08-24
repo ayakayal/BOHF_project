@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import Kernel, RBF
+from sklearn.gaussian_process.kernels import Kernel, RBF, Hyperparameter
 from sklearn.metrics.pairwise import pairwise_kernels
 from itertools import product
 from mpl_toolkits.mplot3d import Axes3D
@@ -156,34 +156,47 @@ def sigmoid(z):
 class DuelingKernel2(Kernel):
     def __init__(self, length_scale=0.1):
         self.length_scale = length_scale
-        self.rbf = RBF(length_scale=length_scale,length_scale_bounds="fixed")
+        self.length_scale_bounds= "fixed"
+        self.rbf = RBF(length_scale=length_scale) #,length_scale_bounds="fixed"
     
-    def __call__(self, X, Y=None):
-        return self.dueling_kernel(X, Y)
+    def __call__(self, X, Y=None, eval_gradient=False):
+        return self.dueling_kernel(X, Y,eval_gradient=eval_gradient)
     
-    def dueling_kernel(self, X, Y=None):
+    def dueling_kernel(self, X, Y=None,eval_gradient=False):
         if Y is None:
             Y = X
         X = np.atleast_2d(X)
         Y = np.atleast_2d(Y)
-        K = np.zeros((X.shape[0], Y.shape[0]))
+       
           # Split X and Y into their components
         X1, X2 = X[:, 0:1], X[:, 1:2]
         Y1, Y2 = Y[:, 0:1], Y[:, 1:2]
-          # Compute the RBF kernel components
+
+            # Compute the RBF kernel components
         K_x1_x1p = self.rbf(X1, Y1)  # k(x1, x1')
         K_x2_x2p = self.rbf(X2, Y2)  # k(x2, x2')
         K_x1_x2p = self.rbf(X1, Y2)  # k(x1, x2')
         K_x2_x1p = self.rbf(X2, Y1)  # k(x2, x1')
         
-        # Compute the custom kernel
+        # Combine the kernel components to form the custom kernel
         K = K_x1_x1p + K_x2_x2p - K_x1_x2p - K_x2_x1p
-
-        # add jitter to avoid having negative standard dev
         if X.shape == Y.shape:
             K += np.eye(X.shape[0]) * 1e-6
+       
         
-        return K
+        if eval_gradient:
+            _, grad_x1_x1p = self.rbf(X1, Y1, eval_gradient=True)
+            _, grad_x2_x2p = self.rbf(X2, Y2, eval_gradient=True)
+            _, grad_x1_x2p = self.rbf(X1, Y2, eval_gradient=True)
+            _, grad_x2_x1p = self.rbf(X2, Y1, eval_gradient=True)
+            
+            gradient = grad_x1_x1p + grad_x2_x2p - grad_x1_x2p - grad_x2_x1p
+            return K, gradient
+           
+        else:
+    
+            return K
+     
         
               
     def diag(self, X):
@@ -191,6 +204,67 @@ class DuelingKernel2(Kernel):
     
     def is_stationary(self):
         return True
+
+# class DuelingKernel2(Kernel):
+#     def __init__(self, length_scale=0.1):
+#         self.length_scale = length_scale
+#         #self.length_scale_bounds= "fixed"
+#         self.rbf = RBF(length_scale=length_scale) #,length_scale_bounds="fixed"
+#     @property
+#     def hyperparameter_length_scale(self):
+#         return  Hyperparameter("length_scale", "numeric", (1e-5, 1e5)) 
+    
+#     def __call__(self, X, Y=None,eval_gradient=False):
+#         return self.dueling_kernel(X, Y, eval_gradient=eval_gradient)
+    
+#     def dueling_kernel(self, X, Y=None,eval_gradient=False):
+#         if Y is None:
+#             Y = X
+#         X = np.atleast_2d(X)
+#         Y = np.atleast_2d(Y)
+#         # K = np.zeros((X.shape[0], Y.shape[0]))
+#           # Split X and Y into their components
+#         X1, X2 = X[:, 0:1], X[:, 1:2]
+#         Y1, Y2 = Y[:, 0:1], Y[:, 1:2]
+
+#         K_x1_x1p = self.rbf(X1, Y1)
+#         K_x2_x2p = self.rbf(X2, Y2)
+#         K_x1_x2p = self.rbf(X1, Y2)
+#         K_x2_x1p = self.rbf(X2, Y1)
+
+#         K = K_x1_x1p + K_x2_x2p - K_x1_x2p - K_x2_x1p
+        
+#         if eval_gradient:
+#             if Y is None:
+#                 _, grad_x1_x1p = self.rbf(X1, Y1, eval_gradient=True)
+#                 _, grad_x2_x2p = self.rbf(X2, Y2, eval_gradient=True)
+#                 _, grad_x1_x2p = self.rbf(X1, Y2, eval_gradient=True)
+#                 _, grad_x2_x1p = self.rbf(X2, Y1, eval_gradient=True)
+#                 print("K shape:", K.shape)
+#                 print("grad_x1_x1p shape:", grad_x1_x1p.shape)
+#                 print("grad_x2_x2p shape:", grad_x2_x2p.shape)
+#                 print("grad_x1_x2p shape:", grad_x1_x2p.shape)
+#                 print("grad_x2_x1p shape:", grad_x2_x1p.shape)
+#                 gradient = np.zeros((X.shape[0], Y.shape[0], grad_x1_x1p.shape[2]), dtype=np.float64)  # Ensure the correct shape
+#                 gradient += grad_x1_x1p + grad_x2_x2p - grad_x1_x2p - grad_x2_x1p
+#                 print("Gradient shape:", gradient.shape)
+#                 print("Gradient type:", type(gradient))
+#                 return K, gradient
+#             else:
+#                 # Return the kernel and a dummy gradient (e.g., None or zeros)
+#                 return K, np.zeros((X.shape[0], Y.shape[0], 0), dtype=np.float64)  # Or return K, None
+#                 print("Gradient shape (Y not None):", gradient.shape)
+       
+#         return K
+              
+    # def diag(self, X):
+    #     return np.diag(self.__call__(X))
+    
+    # def is_stationary(self):
+    #     return True
+  
+    
+  
 
 
 # Loss function
@@ -294,10 +368,12 @@ def predict_f(dataset, values,grid_size,kernel,lambda_reg=0.05,learning_rate=0.1
         grad_norm = np.linalg.norm(grad)
 
     # Periodic logging of loss
-        if iteration % 100 == 0:
+        if iteration % 100000 == 0:
             output_string = f"Iteration {iteration}, Loss: {current_loss}, param: {alpha}\n"
             print(output_string)
-            file.write(output_string)
+            if file is not None:
+                file.write(output_string)
+           
             #print(f"Iteration {iteration}, Loss: {current_loss}, param: {alpha}")
             
         # # # Convergence check
@@ -313,14 +389,16 @@ def predict_f(dataset, values,grid_size,kernel,lambda_reg=0.05,learning_rate=0.1
         
     # Optimal alpha
     optimal_alpha = alpha
-    file.write(f'Final loss: {current_loss}\n')
+    if file is not None:
+        file.write(f'Final loss: {current_loss}\n')
     print('final loss',current_loss)
     # Testing f_t on the grid
     f_values = np.zeros((grid_size, grid_size))
     for i, x1 in enumerate(values):
         for j, x2 in enumerate(values):
             f_values[i, j] = f_t([x1, x2], X_train, optimal_alpha, kernel)
-    file.write(f'f_values: {f_values}\n')
+    if file is not None:
+        file.write(f'f_values: {f_values}\n')
     # np.savetxt(file, f_values, delimiter=",")
     print('f_values',f_values)
 
@@ -334,7 +412,8 @@ def update_sigma_D(dataset, kernel, alpha_gp, values):
     #print('y',y.shape)
     #print('kernel',kernel)
     #print('alpha',alpha_gp)
-    gp = GaussianProcessRegressor(kernel=kernel, optimizer=None, alpha=alpha_gp)
+    #gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=40,optimizer="fmin_l_bfgs_b",alpha=alpha_gp) # return optimizer=None
+    gp = GaussianProcessRegressor(kernel=kernel,optimizer=None,alpha=alpha_gp) 
     gp.fit(X, y)
     X_grid = np.array(list(product(values, repeat=2)))
     #print('X_grid',X_grid.shape)
@@ -683,7 +762,7 @@ def main():
     for run in range(args.n_runs):
 
         # Initialize wandb for each run
-        wandb.init(project="banditHF_debugging", reinit=True)#, settings=wandb.Settings(start_method="thread"))
+        wandb.init(project="TEST_AGAIN", reinit=True)#, settings=wandb.Settings(start_method="thread"))
         
         # Log run-specific parameters
         wandb.run.summary["algo"] = args.algo
