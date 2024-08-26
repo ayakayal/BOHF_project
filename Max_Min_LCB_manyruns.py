@@ -12,10 +12,10 @@ from sklearn.metrics import mean_squared_error
 import wandb
 import argparse
 
+
 ################################################## Generate Reward in RKHS and f as diff in rewards #######################################
 def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samples=10): 
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
+   
     # # Regularization parameter for GP regression
     # alpha = 0.05
 
@@ -589,13 +589,16 @@ def parse_arguments():
 
     args = parser.parse_args()
     return args
-def Max_Min_LCB(args, values, Reward_function, f):
+def Max_Min_LCB(args, values, Reward_function, f,timestamp):
     dataset = np.empty((0, 3))
     M_t = values.tolist()  # Start with all possible x values
     regret_list = []
     
     dueling_kernel_instance = DuelingKernel2(length_scale=args.length_scale)
-    log_filename = f"MaxMinLCB_{args.learning_rate}_{args.lr_decay}.txt"
+    # Get the current timestamp
+   
+    log_filename = f"MaxMinLCB_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
+    
     with open(log_filename, "a") as file: 
 
         for t in range(args.n_iterations):
@@ -679,14 +682,14 @@ def BOHF_SimpleRegret(args, values, Reward_function, f):
     #print('regret',regret)
     return best_x_star,regret,x_star
 
-def BOHF(args, values, Reward_function, f):
+def BOHF(args, values, Reward_function, f,timestamp):
     M_t = values.tolist()  # Start with all possible x values
     regret_list = []
     dueling_kernel_instance = DuelingKernel2(length_scale=args.length_scale)
     N=1
     t=0
     T=args.n_iterations
-    log_filename = f"BOHF_{args.learning_rate}_{args.lr_decay}.txt"
+    log_filename = f"BOHF_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
     with open(log_filename, "a") as file: 
         while True:
             print('t',t)
@@ -762,7 +765,7 @@ def main():
     for run in range(args.n_runs):
 
         # Initialize wandb for each run
-        wandb.init(project="TEST_AGAIN", reinit=True)#, settings=wandb.Settings(start_method="thread"))
+        wandb.init(project="TEST_AGAIN", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
         
         # Log run-specific parameters
         wandb.run.summary["algo"] = args.algo
@@ -782,7 +785,7 @@ def main():
         values, Reward_function, f = generate_preference_RKHS(grid_size=args.grid_size, alpha_gp=0.05, length_scale=args.length_scale, n_samples=args.n_samples) #alpha here was args.alpha_gp
         
         if args.algo == "Max_Min_LCB":
-            regret_list, M_t=Max_Min_LCB(args,values,Reward_function,f)
+            regret_list, M_t=Max_Min_LCB(args,values,Reward_function,f,timestamp)
             #print('M_t',M_t)
             # wandb.log({"Final_M_t": M_t})
         
@@ -812,7 +815,7 @@ def main():
                 'X*': x_star
             })
         elif args.algo == "BOHF":
-            regret_list, M_t=BOHF(args,values,Reward_function,f)
+            regret_list, M_t=BOHF(args,values,Reward_function,f,timestamp)
             #print('M_t',M_t)
             # wandb.log({"Final_M_t": M_t})
         
