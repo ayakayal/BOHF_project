@@ -636,50 +636,55 @@ def Max_Min_LCB(args, values, Reward_function, f,timestamp):
                     })
     return regret_list,M_t
 
-def BOHF_SimpleRegret(args, values, Reward_function, f):
+def BOHF_SimpleRegret(args, values, Reward_function, f,timestamp):
     dataset = np.empty((0, 3))
     
     dueling_kernel_instance = DuelingKernel2(length_scale=args.length_scale)
+    log_filename = f"BOHF_SimpleRegret_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
+    with open(log_filename, "a") as file: 
 
-    for t in range(args.n_iterations):
-            if len(dataset) == 0:
-                sigma_D = np.zeros((args.grid_size, args.grid_size))  # Random initialization
-            else:
-              
-                sigma_D = update_sigma_D(dataset, dueling_kernel_instance, alpha_gp=args.alpha_gp, values=values)
-                #M_t = update_M_t(f_values, sigma_D, beta=args.beta, values=values)
-
-            # Find indices that maximize the standard deviation
-            #print('sigma_D',sigma_D)
-            max_indices = np.unravel_index(np.argmax(sigma_D, axis=None), sigma_D.shape)
-            i, j = max_indices
-            #print('i ',i,' j',j)
-            pair = (values[i], values[j])
-            #print('pair',pair)
-              
-            if pair:
-                x, x_prime = pair
-                p = sigmoid(f[i, j])
-                y = np.random.binomial(1, p)
-                dataset = np.vstack((dataset, [x, x_prime, y]))
+        for t in range(args.n_iterations):
+                if len(dataset) == 0:
+                    sigma_D = np.zeros((args.grid_size, args.grid_size))  # Random initialization
+                else:
                 
-                #print('actual x star',x_star)
-                #regret = compute_regret(x_star, x[0], x_prime[0], f, values)
-                #regret_list.append(regret)
-                #wandb.log({
-                #    "iteration": t,
-                #    "Regret": regret
-                #})
-    f_values, loss = predict_f(dataset, values, args.grid_size, dueling_kernel_instance, lambda_reg=args.lambda_reg, learning_rate=args.learning_rate, n_iterations_GD=args.n_iterations_GD,lr_decay= args.lr_decay)
-    wandb.log({
-    "loss": loss  
-    })
-    x_star = find_most_preferred_action(Reward_function, values)
-    best_x_star=find_x_star_predicted(f_values, values)
-    #regret = compute_regret(x_star, x, x_prime, f, values)
-    regret = compute_regret(x_star, best_x_star, best_x_star, f, values)
-    #print('best_x_star predicted',best_x_star)
-    #print('regret',regret)
+                    sigma_D = update_sigma_D(dataset, dueling_kernel_instance, alpha_gp=args.alpha_gp, values=values)
+                    #M_t = update_M_t(f_values, sigma_D, beta=args.beta, values=values)
+
+                # Find indices that maximize the standard deviation
+                #print('sigma_D',sigma_D)
+                max_indices = np.unravel_index(np.argmax(sigma_D, axis=None), sigma_D.shape)
+                i, j = max_indices
+                #print('i ',i,' j',j)
+                pair = (values[i], values[j])
+                output_string = f"Iteration {t}, Selected Pair: {pair}\n"
+                print(output_string)
+                file.write(output_string)
+                #print('pair',pair)
+                
+                if pair:
+                    x, x_prime = pair
+                    p = sigmoid(f[i, j])
+                    y = np.random.binomial(1, p)
+                    dataset = np.vstack((dataset, [x, x_prime, y]))
+                    
+                    #print('actual x star',x_star)
+                    #regret = compute_regret(x_star, x[0], x_prime[0], f, values)
+                    #regret_list.append(regret)
+                    #wandb.log({
+                    #    "iteration": t,
+                    #    "Regret": regret
+                    #})
+        f_values, loss = predict_f(dataset, values, args.grid_size, dueling_kernel_instance, lambda_reg=args.lambda_reg, learning_rate=args.learning_rate, n_iterations_GD=args.n_iterations_GD,lr_decay= args.lr_decay,filename=log_filename)
+        wandb.log({
+        "loss": loss  
+        })
+        x_star = find_most_preferred_action(Reward_function, values)
+        best_x_star=find_x_star_predicted(f_values, values)
+        #regret = compute_regret(x_star, x, x_prime, f, values)
+        regret = compute_regret(x_star, best_x_star, best_x_star, f, values)
+        #print('best_x_star predicted',best_x_star)
+        #print('regret',regret)
     return best_x_star,regret,x_star
 
 def BOHF(args, values, Reward_function, f,timestamp):
@@ -807,7 +812,7 @@ def main():
             # Finish the current run
             wandb.finish()
         elif args.algo =="BOHF_SimpleRegret":
-            best_x_star,regret,x_star = BOHF_SimpleRegret(args, values, Reward_function, f)
+            best_x_star,regret,x_star = BOHF_SimpleRegret(args, values, Reward_function, f,timestamp)
             # Log results to wandb
             wandb.log({
                 'X* predicted': best_x_star,
