@@ -370,7 +370,7 @@ def predict_f(dataset, values,grid_size,kernel,lambda_reg=0.05,learning_rate=0.1
     # Periodic logging of loss
         if iteration % 100000 == 0:
             output_string = f"Iteration {iteration}, Loss: {current_loss}, param: {alpha}\n"
-            print(output_string)
+            # print(output_string)
             if file is not None:
                 file.write(output_string)
            
@@ -391,7 +391,7 @@ def predict_f(dataset, values,grid_size,kernel,lambda_reg=0.05,learning_rate=0.1
     optimal_alpha = alpha
     if file is not None:
         file.write(f'Final loss: {current_loss}\n')
-    print('final loss',current_loss)
+    # print('final loss',current_loss)
     # Testing f_t on the grid
     f_values = np.zeros((grid_size, grid_size))
     for i, x1 in enumerate(values):
@@ -400,7 +400,7 @@ def predict_f(dataset, values,grid_size,kernel,lambda_reg=0.05,learning_rate=0.1
     if file is not None:
         file.write(f'f_values: {f_values}\n')
     # np.savetxt(file, f_values, delimiter=",")
-    print('f_values',f_values)
+    # print('f_values',f_values)
 
     return f_values, current_loss
 
