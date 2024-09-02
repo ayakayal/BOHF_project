@@ -786,7 +786,7 @@ def main():
     for run in range(args.n_runs):
 
         # Initialize wandb for each run
-        wandb.init(project="TEST_AGAIN", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
+        wandb.init(project="BOHF_beaker_kernels", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
         
         # Log run-specific parameters
         wandb.run.summary["algo"] = args.algo
