@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import Kernel, RBF, Hyperparameter
+from sklearn.gaussian_process.kernels import Kernel, RBF, Hyperparameter, Matern
 from sklearn.metrics.pairwise import pairwise_kernels
 from itertools import product
 from mpl_toolkits.mplot3d import Axes3D
@@ -14,7 +14,7 @@ import argparse
 
 
 ################################################## Generate Reward in RKHS and f as diff in rewards #######################################
-def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samples=10): 
+def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samples=10,base_kernel=None,smoothness=1.5): 
    
     # # Regularization parameter for GP regression
     # alpha = 0.05
@@ -24,10 +24,13 @@ def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samp
 
     # Generate 1D values
     values = np.linspace(0, 1, grid_size)
+    if base_kernel == "Matern":
+        kernel = Matern(length_scale=length_scale, nu=smoothness, length_scale_bounds="fixed")
+      
+    elif base_kernel =="RBF":
+        kernel = RBF(length_scale=length_scale, length_scale_bounds="fixed")
 
-    # Define the kernel with a length scale for 1D
-    kernel = RBF(length_scale=length_scale, length_scale_bounds="fixed")
-
+    
     # Initialize the GaussianProcessRegressor
     gp = GaussianProcessRegressor(kernel=kernel)
 
@@ -154,11 +157,18 @@ def sigmoid(z):
 
 
 class DuelingKernel2(Kernel):
-    def __init__(self, length_scale=0.1):
+    def __init__(self, base_kernel=None, length_scale=0.1, smoothness=1.5):
         self.length_scale = length_scale
         self.length_scale_bounds= "fixed"
-        self.rbf = RBF(length_scale=length_scale) #,length_scale_bounds="fixed"
-    
+        self.base_kernel=base_kernel
+        self.smoothness=smoothness
+        if self.base_kernel == "Matern":
+            self.kernel = Matern(length_scale=length_scale, nu=smoothness)
+      
+        elif self.base_kernel =="RBF":
+            self.kernel = RBF(length_scale=length_scale)
+            
+        
     def __call__(self, X, Y=None, eval_gradient=False):
         return self.dueling_kernel(X, Y,eval_gradient=eval_gradient)
     
@@ -173,10 +183,10 @@ class DuelingKernel2(Kernel):
         Y1, Y2 = Y[:, 0:1], Y[:, 1:2]
 
             # Compute the RBF kernel components
-        K_x1_x1p = self.rbf(X1, Y1)  # k(x1, x1')
-        K_x2_x2p = self.rbf(X2, Y2)  # k(x2, x2')
-        K_x1_x2p = self.rbf(X1, Y2)  # k(x1, x2')
-        K_x2_x1p = self.rbf(X2, Y1)  # k(x2, x1')
+        K_x1_x1p = self.kernel(X1, Y1)  # k(x1, x1')
+        K_x2_x2p = self.kernel(X2, Y2)  # k(x2, x2')
+        K_x1_x2p = self.kernel(X1, Y2)  # k(x1, x2')
+        K_x2_x1p = self.kernel(X2, Y1)  # k(x2, x1')
         
         # Combine the kernel components to form the custom kernel
         K = K_x1_x1p + K_x2_x2p - K_x1_x2p - K_x2_x1p
@@ -185,10 +195,10 @@ class DuelingKernel2(Kernel):
        
         
         if eval_gradient:
-            _, grad_x1_x1p = self.rbf(X1, Y1, eval_gradient=True)
-            _, grad_x2_x2p = self.rbf(X2, Y2, eval_gradient=True)
-            _, grad_x1_x2p = self.rbf(X1, Y2, eval_gradient=True)
-            _, grad_x2_x1p = self.rbf(X2, Y1, eval_gradient=True)
+            _, grad_x1_x1p = self.kernel(X1, Y1, eval_gradient=True)
+            _, grad_x2_x2p = self.kernel(X2, Y2, eval_gradient=True)
+            _, grad_x1_x2p = self.kernel(X1, Y2, eval_gradient=True)
+            _, grad_x2_x1p = self.kernel(X2, Y1, eval_gradient=True)
             
             gradient = grad_x1_x1p + grad_x2_x2p - grad_x1_x2p - grad_x2_x1p
             return K, gradient
@@ -284,10 +294,12 @@ def loss_function(alpha, K, y, lambda_reg):
     sig = np.clip(sig, eps, 1 - eps)
     # Calculate individual losses (element-wise)
     loss_indiv = - (y_reshaped * np.log(sig) + (1 - y_reshaped) * np.log(1 - sig))
+     # Normalize the loss by the number of samples
+    N = y.shape[0]
     #print('Loss individual shape:', loss_indiv)
     
     # Calculate total loss
-    loss = np.sum(loss_indiv) + (lambda_reg / 2) * np.sum(alpha**2)
+    loss = (1 / N) * np.sum(loss_indiv) + (lambda_reg / 2) * np.sum(alpha**2)
     #print('Total loss:', loss)
 
     # print('loss indiv',y*np.log(sig) + (1 - y) * np.log(1 - sig))
@@ -305,7 +317,9 @@ def gradient_loss_function(alpha, K, y, lambda_reg):
     sig = sigmoid(K_alpha)
     eps = 1e-10
     sig = np.clip(sig, eps, 1 - eps)
-    grad = K.T @ (sig - y.reshape(-1, 1)) + lambda_reg * alpha #not sure with or without transpose
+    # Normalize the gradient by the number of samples
+    N = y.shape[0]
+    grad = (1 / N)* K.T @ (sig - y.reshape(-1, 1)) + lambda_reg * alpha #not sure with or without transpose
     #print('grad',grad.shape)
     return grad.flatten()
 
@@ -565,7 +579,7 @@ def parse_arguments():
     parser.add_argument('--alpha_gp', type=float, default=0.05,
                         help='The alpha parameter for Gaussian Process Regression.')
     parser.add_argument('--length_scale', type=float, default=0.1,
-                        help='The length scale for the RBF kernel.')
+                        help='The length scale for the kernel.')
     parser.add_argument('--grid_size', type=int, default=100,
                         help='The size of the grid.')
     parser.add_argument('--lambda_reg', type=float, default=0.05,
@@ -586,6 +600,8 @@ def parse_arguments():
     parser.add_argument("--lr_decay", type=int, default= 0, help= "learning rate decaying or not")
     # parser.add_argument('--log_freq', type=int, default=10,
     #                     help='The frequency of logging.')
+    parser.add_argument("--kernel", type=str, default="RBF", help="Kernel type")
+    parser.add_argument("--smoothness", type=float, default=1, help="Smoothness of the kernel")
 
     args = parser.parse_args()
     return args
@@ -594,10 +610,10 @@ def Max_Min_LCB(args, values, Reward_function, f,timestamp):
     M_t = values.tolist()  # Start with all possible x values
     regret_list = []
     
-    dueling_kernel_instance = DuelingKernel2(length_scale=args.length_scale)
+    dueling_kernel_instance = DuelingKernel2(base_kernel=args.kernel,length_scale=args.length_scale, smoothness=args.smoothness)
     # Get the current timestamp
    
-    log_filename = f"MaxMinLCB_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
+    log_filename = f"MaxMinLCB_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
     
     with open(log_filename, "a") as file: 
 
@@ -639,8 +655,8 @@ def Max_Min_LCB(args, values, Reward_function, f,timestamp):
 def BOHF_SimpleRegret(args, values, Reward_function, f,timestamp):
     dataset = np.empty((0, 3))
     
-    dueling_kernel_instance = DuelingKernel2(length_scale=args.length_scale)
-    log_filename = f"BOHF_SimpleRegret_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
+    dueling_kernel_instance = DuelingKernel2(base_kernel=args.kernel,length_scale=args.length_scale, smoothness=args.smoothness)
+    log_filename = f"BOHF_SimpleRegret_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
     with open(log_filename, "a") as file: 
 
         for t in range(args.n_iterations):
@@ -690,11 +706,11 @@ def BOHF_SimpleRegret(args, values, Reward_function, f,timestamp):
 def BOHF(args, values, Reward_function, f,timestamp):
     M_t = values.tolist()  # Start with all possible x values
     regret_list = []
-    dueling_kernel_instance = DuelingKernel2(length_scale=args.length_scale)
+    dueling_kernel_instance = DuelingKernel2(base_kernel=args.kernel,length_scale=args.length_scale, smoothness= args.smoothness)
     N=1
     t=0
     T=args.n_iterations
-    log_filename = f"BOHF_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
+    log_filename = f"BOHF_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
     with open(log_filename, "a") as file: 
         while True:
             print('t',t)
@@ -763,14 +779,14 @@ def main():
     # Prepare for storing regrets across runs
     all_regret_lists = []
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_dir = f"experiment/{args.algo}_{timestamp}"
+    save_dir = f"experiment/{args.algo}_{args.kernel}_{timestamp}"
     os.makedirs(save_dir, exist_ok=True)  # Create the directory if it doesn't exist
     
     
     for run in range(args.n_runs):
 
         # Initialize wandb for each run
-        wandb.init(project="BOHF_beaker", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
+        wandb.init(project="TEST_AGAIN", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
         
         # Log run-specific parameters
         wandb.run.summary["algo"] = args.algo
@@ -785,9 +801,11 @@ def main():
         wandb.run.summary["n_iterations_GD"] = args.n_iterations_GD
         wandb.run.summary["save_dir"]= save_dir
         wandb.run.summary["lr_decay"]= args.lr_decay
+        wandb.run.summary["kernel"] = args.kernel
+        wandb.run.summary["smoothness"] = args.smoothness
 
         # Generate the preference function and reward
-        values, Reward_function, f = generate_preference_RKHS(grid_size=args.grid_size, alpha_gp=0.05, length_scale=args.length_scale, n_samples=args.n_samples) #alpha here was args.alpha_gp
+        values, Reward_function, f = generate_preference_RKHS(grid_size=args.grid_size, alpha_gp=0.05, length_scale=args.length_scale, n_samples=args.n_samples, base_kernel= args.kernel, smoothness= args.smoothness) #alpha here was args.alpha_gp
         
         if args.algo == "Max_Min_LCB":
             regret_list, M_t=Max_Min_LCB(args,values,Reward_function,f,timestamp)
