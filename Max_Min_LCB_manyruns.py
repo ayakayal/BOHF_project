@@ -805,7 +805,7 @@ def main():
         wandb.run.summary["smoothness"] = args.smoothness
 
         # Generate the preference function and reward
-        values, Reward_function, f = generate_preference_RKHS(grid_size=args.grid_size, alpha_gp=0.05, length_scale=args.length_scale, n_samples=args.n_samples, base_kernel= args.kernel, smoothness= args.smoothness) #alpha here was args.alpha_gp
+        values, Reward_function, f = generate_preference_RKHS(grid_size=args.grid_size, alpha_gp=args.alpha_gp, length_scale=args.length_scale, n_samples=args.n_samples, base_kernel= args.kernel, smoothness= args.smoothness) #alpha here was args.alpha_gp
         
         if args.algo == "Max_Min_LCB":
             regret_list, M_t=Max_Min_LCB(args,values,Reward_function,f,timestamp)
