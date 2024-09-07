@@ -38,7 +38,7 @@ def generate_ackley(grid_size=100):
     
     #f=5*f
     f = scale_to_range(f, -3, 3)
-    print('f',f)
+    #print('f',f)
     # Create a figure with two subplots
     fig = plt.figure(figsize=(14, 7))
     # Compute 1D Ackley function values
@@ -680,10 +680,10 @@ def Max_Min_LCB(args, values, Reward_function, f,timestamp):
     # Get the current timestamp
     
     if args.enable_logging:
-        print('yes')
+        #print('yes')
         log_filename = f"MaxMinLCB_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
     else:
-        print('no')
+        #print('no')
         log_filename = None
 
     
@@ -738,10 +738,10 @@ def BOHF_SimpleRegret(args, values, Reward_function, f,timestamp):
     
     dueling_kernel_instance = DuelingKernel2(base_kernel=args.kernel,length_scale=args.length_scale, smoothness=args.smoothness)
     if args.enable_logging:
-        print('yes')
+        #print('yes')
         log_filename = f"BOHF_SimpleRegret_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
     else:
-        print('no')
+        #print('no')
         log_filename = None
 
     
@@ -810,10 +810,10 @@ def BOHF(args, values, Reward_function, f,timestamp):
     t=0
     T=args.n_iterations
     if args.enable_logging:
-        print('yes')
+        #print('yes')
         log_filename = f"BOHF_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
     else:
-        print('no')
+        #print('no')
         log_filename = None
 
     
