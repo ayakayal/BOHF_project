@@ -12,16 +12,112 @@ from sklearn.metrics import mean_squared_error
 import wandb
 import argparse
 
+def scale_to_range(data, new_min, new_max):
+    old_min, old_max = np.min(data), np.max(data)
+    return new_min + (data - old_min) * (new_max - new_min) / (old_max - old_min)
+############### added ackley function #################################################
+def ackley_function_1d(x, a=20, b=0.2, c=2*np.pi):
+    sum_sq_term = -a * np.exp(-b * np.sqrt(x**2))
+    cos_term = -np.exp(np.cos(c * x))
+    
+    return a + np.exp(1) + sum_sq_term + cos_term
+################################################# Generate ackley function ##########################
+def generate_ackley(grid_size=100): 
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Generate grid values between -5 and 5
+    values = np.linspace(-5, 5, grid_size)
+    
+    # Initialize the matrix f with zeros
+    f = np.zeros((grid_size, grid_size))
+    
+    # Compute f using the Ackley function
+    for i in range(grid_size):
+        for j in range(grid_size):
+            f[i, j] = ackley_function_1d(values[i])-ackley_function_1d(values[j])
+    
+    #f=5*f
+    f = scale_to_range(f, -3, 3)
+    print('f',f)
+    # Create a figure with two subplots
+    fig = plt.figure(figsize=(14, 7))
+    # Compute 1D Ackley function values
+    ackley_values = ackley_function_1d(values)
+    # Plot 1D Ackley function
+    ax1 = fig.add_subplot(121)
+    ax1.plot(values, ackley_values, label='1D Ackley Function', color='b')
+    ax1.set_xlabel('x', fontsize=14)
+    ax1.set_ylabel('f(x)', fontsize=14)
+    ax1.set_title('1D Ackley Function', fontsize=16)
+    ax1.grid(True)
+    ax1.legend()
+    
+    # Plot 2D preference function
+    ax2 = fig.add_subplot(122, projection='3d')
+    state_mesh, action_mesh = np.meshgrid(values, values)
+    surf = ax2.plot_surface(state_mesh, action_mesh, f, cmap='viridis')
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+    ax2.set_xlabel('x1', fontsize=14)
+    ax2.set_ylabel('x2', fontsize=14)
+    ax2.set_zlabel('f(x1, x2)', fontsize=14)
+    ax2.set_title('2D Preference Function', fontsize=16)
+    ax2.view_init(elev=30, azim=45)
 
+    # # Plot f
+    # fig = plt.figure(figsize=(10, 8))
+    # ax = fig.add_subplot(111, projection='3d')
+
+    # # Create meshgrid for plotting
+    # state_mesh, action_mesh = np.meshgrid(values, values)
+
+    # # Plot the surface
+    # surf = ax.plot_surface(state_mesh, action_mesh, f, cmap='viridis')
+
+    # # Add color bar which maps values to colors
+    # fig.colorbar(surf, shrink=0.5, aspect=5)
+
+    # # Set axis labels
+    # ax.set_xlabel('x1', fontsize=20)
+    # ax.set_ylabel('x2', fontsize=20)
+    # ax.set_zlabel('f(x1, x2)', fontsize=20)
+    # ax.grid(False)
+
+    # # Customize the view angle
+    # ax.view_init(elev=30, azim=45)
+
+    
+
+    # # Log f image to WandB
+    wandb.log({"f Image": wandb.Image(fig)})
+    # save_path = os.path.join(f"testing1/f_{timestamp}.png")
+    # plt.savefig(save_path)
+    plt.close()
+    
+    # Calculate sigmoid of f
+    sigmoid_f = sigmoid(f)
+
+    # Plotting sigmoid(f)
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    surf = ax.plot_surface(state_mesh, action_mesh, sigmoid_f, cmap='viridis')
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+
+    ax.set_xlabel('x1', fontsize=20)
+    ax.set_ylabel('x2', fontsize=20)
+    ax.set_zlabel('sigmoid(f(x1, x2))', fontsize=20)
+    ax.grid(False)
+    ax.view_init(elev=30, azim=45)
+    
+    # Log sigmoid(f) image to WandB
+    wandb.log({"Sigmoid_f_Image": wandb.Image(fig)})
+    # save_path = os.path.join(f"testing1/sigmoidf_{timestamp}.png")
+    # plt.savefig(save_path)
+    plt.close()
+    
+    return values,ackley_values, f
 ################################################## Generate Reward in RKHS and f as diff in rewards #######################################
-def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samples=10,base_kernel=None,smoothness=1.5): 
-   
-    # # Regularization parameter for GP regression
-    # alpha = 0.05
-
-    # # Grid size (Domain size)
-    # grid_size = 100 # Number of points in the 1D domain
-
+def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samples=10,base_kernel=None,smoothness=1.5,random_state=None): 
+    # Set seed for reproducibility if provided
     # Generate 1D values
     values = np.linspace(0, 1, grid_size)
     if base_kernel == "Matern":
@@ -32,7 +128,7 @@ def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samp
 
     
     # Initialize the GaussianProcessRegressor
-    gp = GaussianProcessRegressor(kernel=kernel)
+    gp = GaussianProcessRegressor(kernel=kernel,random_state=random_state)
 
     # # Number of sample points for training
     # n_samples = 10
@@ -42,11 +138,11 @@ def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samp
     X_gp = values_samples.reshape(-1, 1)
     #print('X_gp',X_gp)
     # Sample the function values at these points
-    y = gp.sample_y(X_gp, 1).ravel()
+    y = gp.sample_y(X_gp, random_state=random_state).ravel()
     #print('y',y)
 
     # Initialize and fit the GaussianProcessRegressor
-    gpr = GaussianProcessRegressor(kernel=kernel, optimizer=None, alpha=alpha_gp)
+    gpr = GaussianProcessRegressor(kernel=kernel, optimizer=None, alpha=alpha_gp, random_state=random_state)
     gpr.fit(X_gp, y)
     # Generate a dense grid of values for prediction
     X_full = np.linspace(0, 1, grid_size).reshape(-1, 1)
@@ -87,8 +183,9 @@ def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samp
     for i in range(grid_size):
         for j in range(grid_size):
             f[i, j] = Reward_function[i] - Reward_function[j]
-
+    f=f*5
     #print('f',f)
+    #f = scale_to_range(f, -3, 3)
 
     # Plot f
     fig = plt.figure(figsize=(10, 8))
@@ -214,69 +311,8 @@ class DuelingKernel2(Kernel):
     
     def is_stationary(self):
         return True
-
-# class DuelingKernel2(Kernel):
-#     def __init__(self, length_scale=0.1):
-#         self.length_scale = length_scale
-#         #self.length_scale_bounds= "fixed"
-#         self.rbf = RBF(length_scale=length_scale) #,length_scale_bounds="fixed"
-#     @property
-#     def hyperparameter_length_scale(self):
-#         return  Hyperparameter("length_scale", "numeric", (1e-5, 1e5)) 
-    
-#     def __call__(self, X, Y=None,eval_gradient=False):
-#         return self.dueling_kernel(X, Y, eval_gradient=eval_gradient)
-    
-#     def dueling_kernel(self, X, Y=None,eval_gradient=False):
-#         if Y is None:
-#             Y = X
-#         X = np.atleast_2d(X)
-#         Y = np.atleast_2d(Y)
-#         # K = np.zeros((X.shape[0], Y.shape[0]))
-#           # Split X and Y into their components
-#         X1, X2 = X[:, 0:1], X[:, 1:2]
-#         Y1, Y2 = Y[:, 0:1], Y[:, 1:2]
-
-#         K_x1_x1p = self.rbf(X1, Y1)
-#         K_x2_x2p = self.rbf(X2, Y2)
-#         K_x1_x2p = self.rbf(X1, Y2)
-#         K_x2_x1p = self.rbf(X2, Y1)
-
-#         K = K_x1_x1p + K_x2_x2p - K_x1_x2p - K_x2_x1p
-        
-#         if eval_gradient:
-#             if Y is None:
-#                 _, grad_x1_x1p = self.rbf(X1, Y1, eval_gradient=True)
-#                 _, grad_x2_x2p = self.rbf(X2, Y2, eval_gradient=True)
-#                 _, grad_x1_x2p = self.rbf(X1, Y2, eval_gradient=True)
-#                 _, grad_x2_x1p = self.rbf(X2, Y1, eval_gradient=True)
-#                 print("K shape:", K.shape)
-#                 print("grad_x1_x1p shape:", grad_x1_x1p.shape)
-#                 print("grad_x2_x2p shape:", grad_x2_x2p.shape)
-#                 print("grad_x1_x2p shape:", grad_x1_x2p.shape)
-#                 print("grad_x2_x1p shape:", grad_x2_x1p.shape)
-#                 gradient = np.zeros((X.shape[0], Y.shape[0], grad_x1_x1p.shape[2]), dtype=np.float64)  # Ensure the correct shape
-#                 gradient += grad_x1_x1p + grad_x2_x2p - grad_x1_x2p - grad_x2_x1p
-#                 print("Gradient shape:", gradient.shape)
-#                 print("Gradient type:", type(gradient))
-#                 return K, gradient
-#             else:
-#                 # Return the kernel and a dummy gradient (e.g., None or zeros)
-#                 return K, np.zeros((X.shape[0], Y.shape[0], 0), dtype=np.float64)  # Or return K, None
-#                 print("Gradient shape (Y not None):", gradient.shape)
-       
-#         return K
-              
-    # def diag(self, X):
-    #     return np.diag(self.__call__(X))
-    
-    # def is_stationary(self):
-    #     return True
   
     
-  
-
-
 # Loss function
 def loss_function(alpha, K, y, lambda_reg):
     alpha = alpha.reshape(-1, 1)
@@ -560,6 +596,34 @@ def find_x_star_predicted(f_values, values):
     
     return best_x_star
 
+# def find_x_star_ackley(f_values, values):
+#     # Initialize best_x_star and max_count
+#     best_x_star = None
+#     max_count = -1
+    
+#     # Iterate through all x_star candidates
+#     for i, x_star in enumerate(values):
+#         count = 0
+        
+#         # Compare x_star with every other value
+#         for j, x in enumerate(values):
+#             if i != j:
+#                 # Calculate sigmoid of f(x_star, x)
+#                 p = sigmoid(f_values[i, j])
+                
+#                 # Check if p > 0.5
+#                 if p > 0.5:
+#                     count += 1
+        
+#         # Update best_x_star if count is greater than max_count
+#         if count > max_count:
+#             max_count = count
+#             best_x_star = x_star
+    
+#     return best_x_star
+
+
+
 
 
 
@@ -602,7 +666,9 @@ def parse_arguments():
     #                     help='The frequency of logging.')
     parser.add_argument("--kernel", type=str, default="RBF", help="Kernel type")
     parser.add_argument("--smoothness", type=float, default=1, help="Smoothness of the kernel")
-
+    parser.add_argument("--seed", type=int, default=0, help="random state for the preference function generation")
+    parser.add_argument("--preference_function", type=str, default= "RKHS", help= "Test preference function in RKHS or ackley function from the optimization literature")
+    parser.add_argument("--enable_logging", type= int, default = 0, help ='log txt files')
     args = parser.parse_args()
     return args
 def Max_Min_LCB(args, values, Reward_function, f,timestamp):
@@ -612,10 +678,19 @@ def Max_Min_LCB(args, values, Reward_function, f,timestamp):
     
     dueling_kernel_instance = DuelingKernel2(base_kernel=args.kernel,length_scale=args.length_scale, smoothness=args.smoothness)
     # Get the current timestamp
-   
-    log_filename = f"MaxMinLCB_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
     
-    with open(log_filename, "a") as file: 
+    if args.enable_logging:
+        print('yes')
+        log_filename = f"MaxMinLCB_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
+    else:
+        print('no')
+        log_filename = None
+
+    
+    # Conditionally open the file if logging is enabled
+    file = open(log_filename, "a") if log_filename else None
+    
+    try:
 
         for t in range(args.n_iterations):
                 print('t',t)
@@ -635,7 +710,8 @@ def Max_Min_LCB(args, values, Reward_function, f,timestamp):
                 pair = select_pair(values, f_values, sigma_D, beta=args.beta, M_t=M_t)
                 output_string = f"Iteration {t}, Selected Pair: {pair}\n"
                 print(output_string)
-                file.write(output_string)
+                if file:
+                    file.write(output_string)
                 if pair:
                     x, x_prime = pair
                     i = np.searchsorted(values, x[0])
@@ -650,14 +726,29 @@ def Max_Min_LCB(args, values, Reward_function, f,timestamp):
                         "iteration": t,
                         "Regret": regret
                     })
-    return regret_list,M_t
+    finally:
+        # Close the file if it was opened
+        if file:
+            file.close()
+
+    return regret_list, M_t
 
 def BOHF_SimpleRegret(args, values, Reward_function, f,timestamp):
     dataset = np.empty((0, 3))
     
     dueling_kernel_instance = DuelingKernel2(base_kernel=args.kernel,length_scale=args.length_scale, smoothness=args.smoothness)
-    log_filename = f"BOHF_SimpleRegret_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
-    with open(log_filename, "a") as file: 
+    if args.enable_logging:
+        print('yes')
+        log_filename = f"BOHF_SimpleRegret_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
+    else:
+        print('no')
+        log_filename = None
+
+    
+    # Conditionally open the file if logging is enabled
+    file = open(log_filename, "a") if log_filename else None
+    
+    try:
 
         for t in range(args.n_iterations):
                 if len(dataset) == 0:
@@ -675,7 +766,8 @@ def BOHF_SimpleRegret(args, values, Reward_function, f,timestamp):
                 pair = (values[i], values[j])
                 output_string = f"Iteration {t}, Selected Pair: {pair}\n"
                 print(output_string)
-                file.write(output_string)
+                if file:
+                    file.write(output_string)
                 #print('pair',pair)
                 
                 if pair:
@@ -690,7 +782,9 @@ def BOHF_SimpleRegret(args, values, Reward_function, f,timestamp):
                     #wandb.log({
                     #    "iteration": t,
                     #    "Regret": regret
+        
                     #})
+ 
         f_values, loss = predict_f(dataset, values, args.grid_size, dueling_kernel_instance, lambda_reg=args.lambda_reg, learning_rate=args.learning_rate, n_iterations_GD=args.n_iterations_GD,lr_decay= args.lr_decay,filename=log_filename)
         wandb.log({
         "loss": loss  
@@ -701,6 +795,11 @@ def BOHF_SimpleRegret(args, values, Reward_function, f,timestamp):
         regret = compute_regret(x_star, best_x_star, best_x_star, f, values)
         #print('best_x_star predicted',best_x_star)
         #print('regret',regret)
+
+    finally:
+    # Close the file if it was opened
+        if file:
+            file.close()
     return best_x_star,regret,x_star
 
 def BOHF(args, values, Reward_function, f,timestamp):
@@ -710,8 +809,18 @@ def BOHF(args, values, Reward_function, f,timestamp):
     N=1
     t=0
     T=args.n_iterations
-    log_filename = f"BOHF_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
-    with open(log_filename, "a") as file: 
+    if args.enable_logging:
+        print('yes')
+        log_filename = f"BOHF_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
+    else:
+        print('no')
+        log_filename = None
+
+    
+    # Conditionally open the file if logging is enabled
+    file = open(log_filename, "a") if log_filename else None
+    
+    try:
         while True:
             print('t',t)
             N= int(np.sqrt(T* N))
@@ -744,7 +853,8 @@ def BOHF(args, values, Reward_function, f,timestamp):
                 pair = (values[i], values[j])
                 output_string = f"Iteration {t}, Selected Pair: {pair}\n"
                 print(output_string)
-                file.write(output_string)
+                if file:
+                    file.write(output_string)
                 #print('pair',pair)
                 x, x_prime = pair
 
@@ -768,7 +878,11 @@ def BOHF(args, values, Reward_function, f,timestamp):
             f_values, loss = predict_f(dataset_round, values, args.grid_size, dueling_kernel_instance, lambda_reg=args.lambda_reg, learning_rate=args.learning_rate, n_iterations_GD=args.n_iterations_GD, lr_decay= args.lr_decay,filename=log_filename)
             wandb.log({"loss": loss})
             M_t = update_M_t_previous(f_values, sigma_D, beta=args.beta, values=values, Mt_prev=M_t) ## we do not update after each pair, but after each whole round, change how u update Mt
-        
+    finally:
+        # Close the file if it was opened
+        if file:
+            file.close()
+            
     return regret_list, M_t
     
         
@@ -786,7 +900,7 @@ def main():
     for run in range(args.n_runs):
 
         # Initialize wandb for each run
-        wandb.init(project="BOHF_beaker_kernels", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
+        wandb.init(project="TEST_AGAIN", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
         
         # Log run-specific parameters
         wandb.run.summary["algo"] = args.algo
@@ -803,10 +917,14 @@ def main():
         wandb.run.summary["lr_decay"]= args.lr_decay
         wandb.run.summary["kernel"] = args.kernel
         wandb.run.summary["smoothness"] = args.smoothness
+        wandb.run.summary["seed"] = args.seed
+        wandb.run.summary["preference_function"] = args.preference_function
 
         # Generate the preference function and reward
-        values, Reward_function, f = generate_preference_RKHS(grid_size=args.grid_size, alpha_gp=args.alpha_gp, length_scale=args.length_scale, n_samples=args.n_samples, base_kernel= args.kernel, smoothness= args.smoothness) #alpha here was args.alpha_gp
-        
+        if args.preference_function == "RKHS":
+            values, Reward_function, f = generate_preference_RKHS(grid_size=args.grid_size, alpha_gp=args.alpha_gp, length_scale=args.length_scale, n_samples=args.n_samples, base_kernel= args.kernel, smoothness= args.smoothness,random_state= args.seed) #alpha here was args.alpha_gp
+        elif args.preference_function == "ackley":
+            values,Reward_function,f= generate_ackley(grid_size=args.grid_size)
         if args.algo == "Max_Min_LCB":
             regret_list, M_t=Max_Min_LCB(args,values,Reward_function,f,timestamp)
             #print('M_t',M_t)
