@@ -63,30 +63,6 @@ def generate_ackley(grid_size=100):
     ax2.set_title('2D Preference Function', fontsize=16)
     ax2.view_init(elev=30, azim=45)
 
-    # # Plot f
-    # fig = plt.figure(figsize=(10, 8))
-    # ax = fig.add_subplot(111, projection='3d')
-
-    # # Create meshgrid for plotting
-    # state_mesh, action_mesh = np.meshgrid(values, values)
-
-    # # Plot the surface
-    # surf = ax.plot_surface(state_mesh, action_mesh, f, cmap='viridis')
-
-    # # Add color bar which maps values to colors
-    # fig.colorbar(surf, shrink=0.5, aspect=5)
-
-    # # Set axis labels
-    # ax.set_xlabel('x1', fontsize=20)
-    # ax.set_ylabel('x2', fontsize=20)
-    # ax.set_zlabel('f(x1, x2)', fontsize=20)
-    # ax.grid(False)
-
-    # # Customize the view angle
-    # ax.view_init(elev=30, azim=45)
-
-    
-
     # # Log f image to WandB
     wandb.log({"f Image": wandb.Image(fig)})
     # save_path = os.path.join(f"testing1/f_{timestamp}.png")
@@ -138,7 +114,8 @@ def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samp
     X_gp = values_samples.reshape(-1, 1)
     #print('X_gp',X_gp)
     # Sample the function values at these points
-    y = gp.sample_y(X_gp, random_state=random_state).ravel()
+    #y = gp.sample_y(X_gp, random_state=random_state).ravel()
+    y = np.array([-0.5, 0, 0.5, 1, 0.7, 0.2, 0.2, 0.5, 0.95, 0.7])
     #print('y',y)
 
     # Initialize and fit the GaussianProcessRegressor
@@ -482,6 +459,7 @@ def update_M_t(f_values, sigma_D, beta, values,threshold=0.5):
         if all_conditions_met:
             M_t.append(x)
     return M_t
+    
 def update_M_t_previous(f_values, sigma_D, beta, values, Mt_prev, threshold=0.5):
     M_t = []
     #prev_indices = [values.index(x) for x in M_t_prev]  # Convert previous M_t to indices
@@ -678,7 +656,8 @@ def Max_Min_LCB(args, values, Reward_function, f,timestamp):
     
     dueling_kernel_instance = DuelingKernel2(base_kernel=args.kernel,length_scale=args.length_scale, smoothness=args.smoothness)
     # Get the current timestamp
-    
+    identical_pairs_count = 0  # Counter for identical pairs
+    total_pairs_count = 0  # Total number of pairs selected
     if args.enable_logging:
         #print('yes')
         log_filename = f"MaxMinLCB_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
@@ -712,8 +691,12 @@ def Max_Min_LCB(args, values, Reward_function, f,timestamp):
                 print(output_string)
                 if file:
                     file.write(output_string)
+                
                 if pair:
                     x, x_prime = pair
+                    if x == x_prime:
+                        identical_pairs_count += 1
+                    total_pairs_count += 1
                     i = np.searchsorted(values, x[0])
                     j = np.searchsorted(values, x_prime[0])
                     p = sigmoid(f[i, j])
@@ -726,11 +709,14 @@ def Max_Min_LCB(args, values, Reward_function, f,timestamp):
                         "iteration": t,
                         "Regret": regret
                     })
+                    
     finally:
         # Close the file if it was opened
         if file:
             file.close()
-
+    if total_pairs_count > 0:
+        identical_percentage = (identical_pairs_count / total_pairs_count) * 100
+        wandb.log({"Identical Pairs Percentage": identical_percentage})
     return regret_list, M_t
 
 def BOHF_SimpleRegret(args, values, Reward_function, f,timestamp):
@@ -795,7 +781,7 @@ def BOHF_SimpleRegret(args, values, Reward_function, f,timestamp):
         regret = compute_regret(x_star, best_x_star, best_x_star, f, values)
         #print('best_x_star predicted',best_x_star)
         #print('regret',regret)
-
+        
     finally:
     # Close the file if it was opened
         if file:
@@ -809,6 +795,8 @@ def BOHF(args, values, Reward_function, f,timestamp):
     N=1
     t=0
     T=args.n_iterations
+    identical_pairs_count = 0  # Counter for identical pairs
+    total_pairs_count = 0  # Total number of pairs selected
     if args.enable_logging:
         #print('yes')
         log_filename = f"BOHF_{args.kernel}_{args.learning_rate}_{args.lr_decay}_{timestamp}.txt"
@@ -823,11 +811,11 @@ def BOHF(args, values, Reward_function, f,timestamp):
     try:
         while True:
             print('t',t)
-            N= int(np.sqrt(T* N))
-            #print('N',N)
+            N= int(np.ceil(np.sqrt(T* N)))
+            print('N',N)
             dataset_round = np.empty((0, 3))
             for n in range(N):
-                #print('dataset_round',dataset_round)
+                print('dataset_round',dataset_round)
                 if len(dataset_round) == 0:
                     #f_values = np.zeros((args.grid_size, args.grid_size))  # Random initialization
                     sigma_D = np.zeros((args.grid_size, args.grid_size))  # Random initialization
@@ -856,6 +844,9 @@ def BOHF(args, values, Reward_function, f,timestamp):
                 if file:
                     file.write(output_string)
                 #print('pair',pair)
+                if values[i] == values[j]:
+                    identical_pairs_count += 1
+                total_pairs_count += 1
                 x, x_prime = pair
 
             
@@ -870,8 +861,14 @@ def BOHF(args, values, Reward_function, f,timestamp):
                     "Regret": regret
                 })
                 t+=1
-                #print('t',t)
+                print('t',t)
                 if t>=T:
+                    if total_pairs_count > 0:
+                        final_identical_percentage = (identical_pairs_count / total_pairs_count) * 100
+                        wandb.log({
+                            "Final Identical Pairs Percentage": final_identical_percentage
+                        })
+                    print('regret',regret_list)
                     return regret_list, M_t
             
             sigma_D = update_sigma_D(dataset_round, dueling_kernel_instance, alpha_gp=args.alpha_gp, values=values)
@@ -900,7 +897,7 @@ def main():
     for run in range(args.n_runs):
 
         # Initialize wandb for each run
-        wandb.init(project="TEST_AGAIN", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
+        wandb.init(project="BOHF_beaker_parallel", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
         
         # Log run-specific parameters
         wandb.run.summary["algo"] = args.algo
@@ -977,41 +974,6 @@ def main():
 
             # Finish the current run
             wandb.finish()
-
-            
-
-        # # Plot f_values and sigmoid(f_values)
-        # fig = plt.figure(figsize=(10, 8))
-        # ax = fig.add_subplot(111, projection='3d')
-        # state_mesh, action_mesh = np.meshgrid(values, values)
-        # surf = ax.plot_surface(state_mesh, action_mesh, f_values, cmap='viridis')
-        # fig.colorbar(surf, shrink=0.5, aspect=5)
-        # ax.set_xlabel('x1', fontsize=20)
-        # ax.set_ylabel('x2', fontsize=20)
-        # ax.set_zlabel('f_predicted(x1,x2)', fontsize=20)
-        # ax.grid(False)
-        # ax.view_init(elev=30, azim=45)
-        # plt.title('f_values at Last Iteration')
-        # wandb.log({"predicted f_values Last Iteration": wandb.Image(fig)})
-        # plt.close()
-
-        # sigmoid_f_values = sigmoid(f_values)
-        # mse = mean_squared_error(sigmoid(f).flatten(), sigmoid_f_values.flatten())
-        # fig = plt.figure(figsize=(10, 8))
-        # ax = fig.add_subplot(111, projection='3d')
-        # surf = ax.plot_surface(state_mesh, action_mesh, sigmoid_f_values, cmap='viridis')
-        # fig.colorbar(surf, shrink=0.5, aspect=5)
-        # ax.set_xlabel('x1', fontsize=20)
-        # ax.set_ylabel('x2', fontsize=20)
-        # ax.set_zlabel('sigmoid(f_predicted)', fontsize=20)
-        # ax.grid(False)
-        # ax.view_init(elev=30, azim=45)
-        # plt.figtext(0.5, 0.95, f'Mean Squared Error (MSE): {mse:.4f}', ha='center', va='top', fontsize=20)
-        # plt.title('Sigmoid(f_predicted) at last iteration')
-        # wandb.log({"Sigmoid(f_predicted)Last Iteration": wandb.Image(fig)})
-        # plt.close()
-         # Reinitialize wandb to log the average regrets
-      
     
     # After all runs: Compute and log the average of regrets at each iteration across all runs
     if all_regret_lists:
