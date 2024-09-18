@@ -647,6 +647,8 @@ def parse_arguments():
     parser.add_argument("--seed", type=int, default=0, help="random state for the preference function generation")
     parser.add_argument("--preference_function", type=str, default= "RKHS", help= "Test preference function in RKHS or ackley function from the optimization literature")
     parser.add_argument("--enable_logging", type= int, default = 0, help ='log txt files')
+    parser.add_argument("--append_identical_pairs", type= int, default = 0, help ='append identical action pairs')
+    parser.add_argument("--repeat_identical_pairs", type= int, default = 1, help ='Number of identical pairs to append in the dataset')  
     args = parser.parse_args()
     return args
 def Max_Min_LCB(args, values, Reward_function, f,timestamp):
@@ -814,6 +816,12 @@ def BOHF(args, values, Reward_function, f,timestamp):
             N= int(np.ceil(np.sqrt(T* N)))
             print('N',N)
             dataset_round = np.empty((0, 3))
+            # Generate all identical pairs (x, x) and append to dataset_round
+            if args.append_identical_pairs:
+                print('appending identical pairs')
+                for x in values:
+                    for _ in range(args.repeat_identical_pairs):
+                        dataset_round = np.vstack((dataset_round, [x, x, 0.5]))
             for n in range(N):
                 print('dataset_round',dataset_round)
                 if len(dataset_round) == 0:
@@ -897,7 +905,7 @@ def main():
     for run in range(args.n_runs):
 
         # Initialize wandb for each run
-        wandb.init(project="BOHF_beaker_parallel", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
+        wandb.init(project="BOHF_identical_pairs", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
         
         # Log run-specific parameters
         wandb.run.summary["algo"] = args.algo
@@ -916,6 +924,8 @@ def main():
         wandb.run.summary["smoothness"] = args.smoothness
         wandb.run.summary["seed"] = args.seed
         wandb.run.summary["preference_function"] = args.preference_function
+        wandb.run.summary["append_identical_pairs"]=args.append_identical_pairs
+        wandb.run.summary["repeat_identical_pairs"]=args.repeat_identical_pairs
 
         # Generate the preference function and reward
         if args.preference_function == "RKHS":
