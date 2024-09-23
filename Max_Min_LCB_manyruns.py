@@ -40,47 +40,74 @@ def generate_ackley(grid_size=100):
     f = scale_to_range(f, -3, 3)
     #print('f',f)
     # Create a figure with two subplots
-    fig = plt.figure(figsize=(14, 7))
-    # Compute 1D Ackley function values
-    ackley_values = ackley_function_1d(values)
-    # Plot 1D Ackley function
-    ax1 = fig.add_subplot(121)
-    ax1.plot(values, ackley_values, label='1D Ackley Function', color='b')
-    ax1.set_xlabel('x', fontsize=14)
-    ax1.set_ylabel('f(x)', fontsize=14)
-    ax1.set_title('1D Ackley Function', fontsize=16)
-    ax1.grid(True)
-    ax1.legend()
+    # fig = plt.figure(figsize=(14, 7))
+    # # Compute 1D Ackley function values
+    # ackley_values = ackley_function_1d(values)
+    # # Plot 1D Ackley function
+    # ax1 = fig.add_subplot(121)
+    # ax1.plot(values, ackley_values, color='b')
+    # ax1.set_xlabel(r"$x$", fontsize=14)
+    # ax1.set_ylabel(r"$f(x)$", fontsize=14)
+   
+    # ax1.grid(False)
+    # ax1.legend()
     
-    # Plot 2D preference function
-    ax2 = fig.add_subplot(122, projection='3d')
-    state_mesh, action_mesh = np.meshgrid(values, values)
-    surf = ax2.plot_surface(state_mesh, action_mesh, f, cmap='viridis')
-    fig.colorbar(surf, shrink=0.5, aspect=5)
-    ax2.set_xlabel('x1', fontsize=14)
-    ax2.set_ylabel('x2', fontsize=14)
-    ax2.set_zlabel('f(x1, x2)', fontsize=14)
-    ax2.set_title('2D Preference Function', fontsize=16)
-    ax2.view_init(elev=30, azim=45)
+    # # Plot 2D preference function
+    # ax2 = fig.add_subplot(122, projection='3d')
+    # state_mesh, action_mesh = np.meshgrid(values, values)
+    # surf = ax2.plot_surface(state_mesh, action_mesh, f, cmap='viridis')
+    # fig.colorbar(surf, shrink=0.5, aspect=5)
+    # ax2.set_xlabel('x1', fontsize=14)
+    # ax2.set_ylabel('x2', fontsize=14)
+    # ax2.set_zlabel('f(x1, x2)', fontsize=14)
+    # ax2.set_title('2D Preference Function', fontsize=16)
+    # ax2.view_init(elev=30, azim=45)
 
-    # # Log f image to WandB
-    wandb.log({"f Image": wandb.Image(fig)})
-    # save_path = os.path.join(f"testing1/f_{timestamp}.png")
-    # plt.savefig(save_path)
-    plt.close()
+    # # # Log f image to WandB
+    # wandb.log({"f Image": wandb.Image(fig)})
+    # # save_path = os.path.join(f"testing1/f_{timestamp}.png")
+    # # plt.savefig(save_path)
+    # plt.close()
+    # Plot 1D Ackley function
+    fig1 = plt.figure(figsize=(7, 7))
+    ackley_values = ackley_function_1d(values)  # Compute 1D Ackley function values
+    plt.plot(values, ackley_values, color='b')
+    plt.xlabel(r"$x$", fontsize=14)
+    plt.ylabel(r"$f(x)$", fontsize=14)
+    plt.grid(False)
+    plt.legend()
+    # Log 1D Ackley function figure to WandB
+    wandb.log({"1D Ackley Function": wandb.Image(fig1)})
+    plt.close(fig1)  # Close the figure after logging
+
+    # Plot 2D Preference function
+    fig2 = plt.figure(figsize=(7, 7))
+    action_mesh, state_mesh = np.meshgrid(values, values)
+    ax2 = fig2.add_subplot(111, projection='3d')
+    surf = ax2.plot_surface(state_mesh, action_mesh, f, cmap='viridis')
+    fig2.colorbar(surf, shrink=0.5, aspect=5)
+    ax2.set_xlabel(r"$x$", fontsize=20)
+    ax2.set_ylabel(r"$x^{'}$", fontsize=20)
+    ax2.set_zlabel(r"$h(x, x^{'})$", fontsize=20)
+    ax2.grid(False)
+   
+    ax2.view_init(elev=30, azim=45)
+    # Log 2D Preference function figure to WandB
+    wandb.log({"2D Preference Function": wandb.Image(fig2)})
+    plt.close(fig2)  # Close the figure after logging
     
     # Calculate sigmoid of f
     sigmoid_f = sigmoid(f)
 
     # Plotting sigmoid(f)
-    fig = plt.figure(figsize=(10, 8))
+    fig = plt.figure(figsize=(7, 7))
     ax = fig.add_subplot(111, projection='3d')
     surf = ax.plot_surface(state_mesh, action_mesh, sigmoid_f, cmap='viridis')
     fig.colorbar(surf, shrink=0.5, aspect=5)
 
-    ax.set_xlabel('x1', fontsize=20)
-    ax.set_ylabel('x2', fontsize=20)
-    ax.set_zlabel('sigmoid(f(x1, x2))', fontsize=20)
+    ax.set_xlabel(r"$x$", fontsize=20)
+    ax.set_ylabel(r"$x^{'}$", fontsize=20)
+    ax.set_zlabel(r"$\mu(h(x, x^{'}))$", fontsize=20)
     ax.grid(False)
     ax.view_init(elev=30, azim=45)
     
@@ -132,15 +159,14 @@ def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samp
     # Plot the results
     plt.figure(figsize=(10, 6))
 
-    # Plot the training points
-    plt.scatter(X_gp, y, color='r', s=50, zorder=10, label='Training points')
+
 
     # Plot the predicted mean
-    plt.plot(X_full, y_pred, 'b-', label='Predicted mean')
+    plt.plot(X_full, y_pred, 'b-')
 
-    plt.xlabel('Input')
-    plt.ylabel('Output')
-    plt.title('Gaussian Process Regression on 1D Domain')
+    plt.xlabel(r"$x$", fontsize=20)
+    plt.ylabel(r"$f(x)$",fontsize=20)
+
     plt.legend()
     plt.grid(False)
      # Log R image to WandB
@@ -161,6 +187,9 @@ def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samp
         for j in range(grid_size):
             f[i, j] = Reward_function[i] - Reward_function[j]
     f=f*5
+    # value_at_x1_0_x2_1 = f[0, grid_size - 1]
+
+    # print("Value at x1=0, x2=1:", value_at_x1_0_x2_1)
     #print('f',f)
     #f = scale_to_range(f, -3, 3)
 
@@ -169,25 +198,29 @@ def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samp
     ax = fig.add_subplot(111, projection='3d')
 
     # Create meshgrid for plotting
-    state_mesh, action_mesh = np.meshgrid(values, values)
+    action_mesh, state_mesh = np.meshgrid(values, values)
+    # print('f',f)
 
     # Plot the surface
     surf = ax.plot_surface(state_mesh, action_mesh, f, cmap='viridis')
+    # Add a dot at the specified point
+    # x1_dot = 0
+    # x2_dot = 1
+    # z_dot = f[x1_dot,99]  # Calculate the corresponding z value
+    # ax.scatter(x1_dot, x2_dot, z_dot, color='red', s=50)
 
     # Add color bar which maps values to colors
     fig.colorbar(surf, shrink=0.5, aspect=5)
 
     # Set axis labels
-    ax.set_xlabel('x1', fontsize=20)
-    ax.set_ylabel('x2', fontsize=20)
-    ax.set_zlabel('f(x1,x2)', fontsize=20)
+    ax.set_xlabel(r"$x$", fontsize=20)
+    ax.set_ylabel(r"$x^{'}$", fontsize=20)
+    ax.set_zlabel(r"$h(x,x^{'})$", fontsize=20)
     ax.grid(False)
 
     # Customize the view angle
     ax.view_init(elev=30, azim=45)
 
-    # Add text annotation
-    ax.text2D(0.05, 0.95, f'Alpha: {alpha_gp}', transform=ax.transAxes, fontsize=14, color='red')
     
     # Log f image to WandB
     wandb.log({"f Image": wandb.Image(fig)})
@@ -206,12 +239,13 @@ def generate_preference_RKHS(grid_size=100,alpha_gp=0.05,length_scale=0.1,n_samp
     surf = ax.plot_surface(state_mesh, action_mesh, sigmoid_f, cmap='viridis')
     fig.colorbar(surf, shrink=0.5, aspect=5)
 
-    ax.set_xlabel('x1', fontsize=20)
-    ax.set_ylabel('x2', fontsize=20)
-    ax.set_zlabel('sigmoid(f(x1, x2))', fontsize=20)
+    ax.set_xlabel(r"$x$", fontsize=20)
+    ax.set_ylabel(r"$x^{'}$", fontsize=20)
+    ax.set_zlabel(r"$\mu(h(x, x^{'}))$", fontsize=20)
+    ax.zaxis.label.set_rotation(180)
     ax.grid(False)
     ax.view_init(elev=30, azim=45)
-    ax.text2D(0.05, 0.95, f'Alpha: {alpha_gp}', transform=ax.transAxes, fontsize=14, color='red')
+    # ax.text2D(0.05, 0.95, f'Alpha: {alpha_gp}', transform=ax.transAxes, fontsize=14, color='red')
 
     wandb.log({"Sigmoid_f_Image": wandb.Image(fig)})
     plt.close()
@@ -818,12 +852,17 @@ def BOHF(args, values, Reward_function, f,timestamp):
             dataset_round = np.empty((0, 3))
             # Generate all identical pairs (x, x) and append to dataset_round
             if args.append_identical_pairs:
-                print('appending identical pairs')
+                # print('appending identical pairs')
                 for x in values:
+                    #print('x',x)
+                    i = np.where(values == x)[0][0]
+                    #print('i',i)
                     for _ in range(args.repeat_identical_pairs):
-                        dataset_round = np.vstack((dataset_round, [x, x, 0.5]))
+                        p = sigmoid(f[i, i])  # Compute the probability using f[i, i]
+                        y = np.random.binomial(1, p)  # Sample from a binomial distribution
+                        dataset_round = np.vstack((dataset_round, [x, x, y]))
             for n in range(N):
-                print('dataset_round',dataset_round)
+                # print('dataset_round',dataset_round)
                 if len(dataset_round) == 0:
                     #f_values = np.zeros((args.grid_size, args.grid_size))  # Random initialization
                     sigma_D = np.zeros((args.grid_size, args.grid_size))  # Random initialization
@@ -905,7 +944,7 @@ def main():
     for run in range(args.n_runs):
 
         # Initialize wandb for each run
-        wandb.init(project="BOHF_identical_pairs", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
+        wandb.init(project="BOHF_identical_pairs2", reinit=True, settings=wandb.Settings(start_method="thread"))#, settings=wandb.Settings(start_method="thread"))
         
         # Log run-specific parameters
         wandb.run.summary["algo"] = args.algo
